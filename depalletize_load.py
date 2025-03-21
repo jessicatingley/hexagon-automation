@@ -63,27 +63,24 @@ def non_blocking_move(robot: RDK.Item, offset: list, start_pos: list):
 def state_machine(robot: RDK.Item, num_unloads: int):
     global entry_flag, state, motion_time, flip_flag
 
-    # Joint offsets for de-palletization
+    # Determine joint offsets for de-palletization
     offset_x = num_unloads % 2
-    offset_y = num_unloads % 4
+    offset_y = (num_unloads // 3) % 13
+
+    # Flip end effector every other unload
     if offset_x:
         bearing_offset_x = [0 * offset_x, -6.67 * offset_x, 15.14 * offset_x, -10.84 * offset_x, 1.19 * offset_x,
                             0.78 * offset_x]
         bearing_offset_y = [-2.72 * offset_y, -0.16 * offset_y, 0 * offset_y, 0 * offset_y, 1.78 * offset_y,
                             -0.20 * offset_y]
+        state = States.FLIP_VACUUM if not flip_flag else state
     else:
-        bearing_offset_x = [-1.91 * offset_x, -1.36 * offset_x, 7.07 * offset_x, -10.83 * offset_x, 2.21 * offset_x,
-                            6.59 * offset_x]
+        bearing_offset_x = [-2.35 * offset_x, -0.71 * offset_x, 5.72 * offset_x, 9.25 * offset_x, 1.47 * offset_x,
+                            7.26 * offset_x]
         bearing_offset_y = [-2.72 * offset_y, -0.16 * offset_y, 0 * offset_y, 0 * offset_y, 1.78 * offset_y,
                             -0.20 * offset_y]
 
     bearing_offset = [x + y for x, y in zip(bearing_offset_x, bearing_offset_y)]
-
-    # Offset for flipping vacuum grip
-    if offset_x == 1:
-        # flip_offset = [-5.17, -18.65, 41.78, -15.26, -83.91, -190.93]
-        # bearing_offset = [b + f for b, f in zip(bearing_offset, flip_offset)]
-        state = States.FLIP_VACUUM if not flip_flag else state
 
     match state:
         case States.FLIP_VACUUM:

@@ -111,6 +111,7 @@ def state_machine(robot: RDK.Item, num_unloads: int):
                     non_blocking_move(robot, bearing_offset, BEARING_CONTACT)
 
             if (time.perf_counter() - motion_time) >= 5:
+                RDK.setDIO(robot, offset_x, 1)
                 state = States.LIFT_BEARING
                 entry_flag = 0
 
@@ -140,10 +141,24 @@ def state_machine(robot: RDK.Item, num_unloads: int):
 
 def main():
     robot = establish_connection()
+
+    # Initialize IO
+    robot.setDO(io_value=1, io_var=0)
+    robot.setDO(io_value=1, io_var=1)
+    robot.setDO(io_value=0, io_var=2)
+
     go_home(robot)
     num_unloads = 0
     while True:
         num_unloads = state_machine(robot, num_unloads)
+
+    # IO LOGIC
+    # robot.setDO(io_value=0, io_var=1)  # First, set D_O0 to low (activate vacuum)
+    # robot.setDO(io_value=0, io_var=0)  # Then D_O1 can be set to low (activate vacuum)
+
+    # robot.setDO(io_value=1, io_var=1)  # Deactivate vacuum
+    # robot.setDO(io_value=1, io_var=0)  # Deactivate vacuum
+    # robot.setDO(io_value=1, io_var=2)  # Activate blow off nozzle
 
 
 if __name__ == '__main__':

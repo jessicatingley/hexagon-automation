@@ -17,24 +17,24 @@ class States(Enum):
     LOAD = auto()
 
 
+NUM_TRAY_ROWS = 6
 state = States.APPROACH_BEARING
 entry_flag = 0
 flip_flag = 0
 motion_time = 0
 
-BEARING_APPROACH = [-74.24, -141.68, -106.94, 72.65, 28.82, -94.27]
-BEARING_CONTACT = [-79.18, -141.68, -106.94, 72.61, 34.51, -94.27]
-BEARING_LEAVE = [-79.18, -128.60, -106.94, 60., 34.51, -93.40]
+BEARING_APPROACH = [-74.68, -140.63, -107.41, 72.27, 30.82, -97.65]
+BEARING_CONTACT = [-78.65, -140.63, -107.41, 71.90, 34.38, -97.65]
+BEARING_LEAVE = [-78.65, -126.62, -107.41, 57.41, 34.38, -92.97]
 
-FLIPPED_BEARING_APPROACH = [-76.95, -149.72, -81.01, 48.41, -54.55, -268.35]
-FLIPPED_BEARING_CONTACT = [-80.43, -149.72, -81.01, 48.41, -51.23, -268.35]
-FLIPPED_BEARING_LEAVE = [-80.43, -144.30, -81.08, 45.47, -55.04, -268.26]
+FLIPPED_BEARING_APPROACH = [-77.23, -140.65, -81.23, 43.95, -55.73, -270.90]
+FLIPPED_BEARING_CONTACT = [-81.12, -140.65, -81.23, 45.62, -52.02, -270.70]
+FLIPPED_BEARING_LEAVE = [-81.04, -134.42, -81.23, 36.41, -52.31, -270.96]
 
-LOAD = [-58.10, -101.58, -111.03, -97.66, -66.67, -200.53]
-FLIPPED_LOAD = [-62.64, -108.24, -115.58, -7.20, 72.80, -164.01]
+APPROACH_TOMB = [-54.41, -120.80, -114.91, -74.29, -68.06, -207.66]
 
 
-def establish_connection() -> RDK.Item:
+def init_robot() -> RDK.Item:
     robot = RDK.Item("", robolink.ITEM_TYPE_ROBOT)
     robot.setTool(robomath.Pose(0, 0, 75, 0, 0, 0))
     reference_frame = RDK.Item('UR5e Base')
@@ -43,6 +43,11 @@ def establish_connection() -> RDK.Item:
     RDK.ShowMessage("Trying to connect to %s..." % robot.Name())
     robot.Connect()
     time.sleep(3)
+
+    # Initialize IO
+    robot.setDO(io_value=1, io_var=0)
+    robot.setDO(io_value=1, io_var=1)
+    robot.setDO(io_value=0, io_var=2)
     return robot
 
 
@@ -64,11 +69,11 @@ def state_machine(robot: RDK.Item, num_unloads: int):
     global entry_flag, state, motion_time, flip_flag
 
     # Determine joint offsets for de-palletization
-    offset = num_unloads % 6
+    offset = num_unloads % 2  # TODO: CHANGE 2 BACK TO 6 WHEN GRIPPER FIXED (NUM_TRAY_ROWS)
 
     # Flip end effector every other unload
     if num_unloads % 2:
-        bearing_offset = [-2.21 * offset, 0 * offset, 0 * offset, 0 * offset, 1.73 * offset, 0.35 * offset]
+        bearing_offset = [-2.32 * offset, -1.0 * offset, 0.70 * offset, -0.60 * offset, 2.44 * offset, -0.30 * offset]
         state = States.FLIP_VACUUM if not flip_flag else state
     else:
         bearing_offset = [-2.55 * offset, 0 * offset, -0.39 * offset, 0.13 * offset, 3.23 * offset, -0.07 * offset]
@@ -123,7 +128,7 @@ def state_machine(robot: RDK.Item, num_unloads: int):
 
         case States.APPROACH_LOAD:
             if not entry_flag:
-                non_blocking_move(robot, [0, 0, 0, 0, 0, 0], LOAD)
+                non_blocking_move(robot, [0, 0, 0, 0, 0, 0], APPROACH_TOMB)
 
             if not robot.Busy():
                 state = States.APPROACH_BEARING
@@ -133,12 +138,7 @@ def state_machine(robot: RDK.Item, num_unloads: int):
 
 
 def main():
-    robot = establish_connection()
-
-    # Initialize IO
-    robot.setDO(io_value=1, io_var=0)
-    robot.setDO(io_value=1, io_var=1)
-    robot.setDO(io_value=0, io_var=2)
+    robot = init_robot()
 
     go_home(robot)
     num_unloads = 0

@@ -14,7 +14,9 @@ class States(Enum):
     LIFT_BEARING = auto()
     FLIP_VACUUM = auto()
     APPROACH_LOAD = auto()
-    LOAD = auto()
+    LOAD1 = auto()
+    LOAD2 = auto()
+    EXIT_LOAD = auto()
 
 
 NUM_TRAY_ROWS = 6
@@ -24,14 +26,17 @@ flip_flag = 0
 motion_time = 0
 
 BEARING_APPROACH = [-74.68, -140.63, -107.41, 72.27, 30.82, -97.65]
-BEARING_CONTACT = [-78.65, -140.63, -107.41, 71.90, 34.38, -97.65]
+BEARING_CONTACT = [-78.65, -141.12, -107.41, 71.90, 35.02, -96.35]
 BEARING_LEAVE = [-78.65, -126.62, -107.41, 57.41, 34.38, -92.97]
 
 FLIPPED_BEARING_APPROACH = [-77.23, -140.65, -81.23, 43.95, -55.73, -270.90]
-FLIPPED_BEARING_CONTACT = [-81.12, -140.65, -81.23, 45.62, -52.02, -270.70]
-FLIPPED_BEARING_LEAVE = [-81.04, -134.42, -81.23, 36.41, -52.31, -270.96]
+FLIPPED_BEARING_CONTACT = [-81.12, -142.90, -81.23, 45.62, -51.40, -272.42]
+FLIPPED_BEARING_LEAVE = [-81.04, -130.42, -81.23, 36.41, -52.31, -270.96]
 
 APPROACH_TOMB = [-54.41, -120.80, -114.91, -74.29, -68.06, -207.66]
+LOAD1 = [-46.41, -123.60, -108.88, -76.26, -59.81, -214.63]
+LOAD2 = [-43.84, -124.90, -105.40, -79.87, -59.81, -214.63]
+EXIT_LOAD = [-41.35, -126.81, -101.93, -80.35, -56.50, -217.53]
 
 
 def init_robot() -> RDK.Item:
@@ -107,8 +112,9 @@ def state_machine(robot: RDK.Item, num_unloads: int):
                     non_blocking_move(robot, bearing_offset, BEARING_CONTACT)
 
             if not robot.Busy():
-                robot.setDO(io_value=0, io_var=1)  # First, set D_O0 to low (activate vacuum)
-                robot.setDO(io_value=0, io_var=0)
+                robot.setDO(io_value=0, io_var=1)
+                if flip_flag:
+                    robot.setDO(io_value=0, io_var=0)
                 if (time.perf_counter() - motion_time) >= 3:
                     state = States.LIFT_BEARING
                     entry_flag = 0
@@ -131,7 +137,31 @@ def state_machine(robot: RDK.Item, num_unloads: int):
                 non_blocking_move(robot, [0, 0, 0, 0, 0, 0], APPROACH_TOMB)
 
             if not robot.Busy():
-                state = States.APPROACH_BEARING
+                state = States.LOAD1
+                entry_flag = 0
+
+        case States.LOAD1:
+            if not entry_flag:
+                non_blocking_move(robot, [0, 0, 0, 0, 0, 0], LOAD1)
+
+            if not robot.Busy():
+                state = States.LOAD2
+                entry_flag = 0
+
+        case States.LOAD2:
+            if not entry_flag:
+                non_blocking_move(robot, [0, 0, 0, 0, 0, 0], LOAD2)
+
+            if not robot.Busy():
+                state = States.EXIT_LOAD
+                entry_flag = 0
+
+        case States.EXIT_LOAD:
+            if not entry_flag:
+                non_blocking_move(robot, [0, 0, 0, 0, 0, 0], EXIT_LOAD)
+
+            if not robot.Busy():
+                state = States.EXIT_LOAD
                 entry_flag = 0
 
     return num_unloads

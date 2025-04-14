@@ -49,6 +49,7 @@ def init_robot() -> RDK.Item:
     robot.setTool(robomath.Pose(0, 0, 75, 0, 0, 0))
     reference_frame = RDK.Item('UR5e Base')
     robot.setFrame(reference_frame)
+    robot.setSpeed(speed_joints=40, speed_linear=0.06)
 
     RDK.ShowMessage("Trying to connect to %s..." % robot.Name())
     robot.Connect()
@@ -152,9 +153,10 @@ def state_machine(robot: RDK.Item, num_unloads: int):
 
         case States.LOAD_STAGE_1:
             if not entry_flag:
+                robot.setSpeed(speed_joints=5, speed_linear=0.0001)
                 non_blocking_move(robot, [0, 0, 0, 0, 0, 0], APPROACH_TOMB)
 
-            if not robot.Busy():
+            if not robot.Busy() and (time.perf_counter() - motion_time) >= 2:
                 state = States.LOAD_STAGE_2
                 entry_flag = 0
 
@@ -162,7 +164,7 @@ def state_machine(robot: RDK.Item, num_unloads: int):
             if not entry_flag:
                 non_blocking_move(robot, [0, 0, 0, 0, 0, 0], LOAD1)
 
-            if not robot.Busy():
+            if not robot.Busy() and (time.perf_counter() - motion_time) >= 2:
                 state = States.LOAD_STAGE_3
                 entry_flag = 0
 
@@ -182,6 +184,7 @@ def state_machine(robot: RDK.Item, num_unloads: int):
                 non_blocking_move(robot, [0, 0, 0, 0, 0, 0], EXIT_LOAD)
 
             if not robot.Busy():
+                robot.setSpeed(speed_joints=40, speed_linear=0.06)
                 state = States.EXIT_LOAD
                 entry_flag = 0
 

@@ -29,10 +29,19 @@ flip_flag = 0     # Used to determine if the vacuum tool should be flipped
 motion_time = 0   # Used for timing transitions
 
 # Predefined joint positions for the robot
-BEARING_APPROACH = [-72.08, -136.94, -107.35, 72.62, 28.90, -101.10]
-BEARING_CONTACT = [-76.86, -138.17, -107.35, 72.01, 33.81, -101.37]
-BEARING_LEAVE = [-78.65, -116.62, -107.35, 45.52, 34.38, -92.97]
+# BEARING_APPROACH = [-72.08, -136.94, -107.35, 72.62, 28.90, -101.10]
+# BEARING_CONTACT = [-76.86, -138.17, -107.35, 72.01, 33.81, -101.37]
+# BEARING_LEAVE = [-78.65, -116.62, -107.35, 45.52, 34.38, -92.97]
 
+# BEARING_APPROACH = robomath.xyzrpw_2_pose([-150.174, -565.479, 214.394, 0.932, -84.477, 1.286])
+BEARING_CONTACT = robomath.xyzrpw_2_pose([-189.766, -561.344, 205.956, 2.439, -83.195, 0.019])
+BEARING_APPROACH = BEARING_CONTACT * robomath.transl(0, 0, -50)
+BEARING_LEAVE = BEARING_CONTACT * robomath.transl(180, 0, 0)
+
+# FLIPPED_BEARING_APPROACH = robomath.xyzrpw_2_pose([-150.025, -565.479, 214.394, 124.553, 1.528, -126.685])
+# FLIPPED_BEARING_CONTACT = robomath.xyzrpw_2_pose([-201.302, -564.701, 206.736, 128.401, 1.997, -122.804])
+# FLIPPED_BEARING_APPROACH = FLIPPED_BEARING_CONTACT * robomath.transl(0, 0, -50)
+# FLIPPED_BEARING_LEAVE = FLIPPED_BEARING_CONTACT * robomath.transl(180, 0, 0)
 FLIPPED_BEARING_APPROACH = [-75.78, -145.76, -82.02, 47.66, -56.88, -268.48]
 FLIPPED_BEARING_CONTACT = [-80.42, -145.67, -81.23, 49.79, -52.09, -272.93]
 FLIPPED_BEARING_LEAVE = [-81.04, -120.42, -81.23, 30.41, -52.31, -270.96]
@@ -42,13 +51,17 @@ LOAD1 = [-52.23, -123.73, -110.89, -76.51, -66.93, -205.80]
 LOAD2 = [-48.45, -124.34, -109.89, -74.35, -61.02, -209.74]
 EXIT_LOAD = [-43.43, -116.53, -123.78, -68.05, -59.07, -212.17]
 
+FLIPPED_APPROACH_TOMB = [-54.98, -124.79, -77.34, -207.92, -67.75, 21.85]
+FLIPPED_EXIT_LOAD = [-41.64, -117.36, -90.60, -207.93, -57.33, 34.36]
+
+APPROACH_TOP_SCREW = [-39.86, -108.00, -107.55, -15.31, 61.30, -145.73]
+TOP_SCREW = [-44.62, -118.14, -92.73, -19.66, 63.11, -148.56]
+
 
 # Initialize the robot arm, tool, frame, and IO
 def init_robot() -> RDK.Item:
     robot = RDK.Item("", robolink.ITEM_TYPE_ROBOT)
-    robot.setTool(robomath.Pose(0, 0, 75, 0, 0, 0))
-    reference_frame = RDK.Item('UR5e Base')
-    robot.setFrame(reference_frame)
+    robot.setTool(robomath.Pose(0, 70, 70, -45, 0, 0))
     robot.setSpeed(speed_joints=40, speed_linear=0.06)
 
     RDK.ShowMessage("Trying to connect to %s..." % robot.Name())
@@ -97,7 +110,7 @@ def state_machine(robot: RDK.Item, num_unloads: int):
         case States.FLIP_VACUUM:
             if not entry_flag:
                 flip_flag = 1
-                non_blocking_move(robot, [10, 0, 0, 0, -90, -180], BEARING_LEAVE)
+                robot.MoveJ(FLIPPED_BEARING_LEAVE)
 
             if not robot.Busy():
                 state = States.APPROACH_BEARING
@@ -106,9 +119,11 @@ def state_machine(robot: RDK.Item, num_unloads: int):
         case States.APPROACH_BEARING:
             if not entry_flag:
                 if flip_flag:
+                    # robot.MoveL((FLIPPED_BEARING_APPROACH * robomath.transl(0, 0, 25 * offset)), blocking=False)
                     non_blocking_move(robot, bearing_offset, FLIPPED_BEARING_APPROACH)
                 else:
-                    non_blocking_move(robot, bearing_offset, BEARING_APPROACH)
+                    robot.MoveL((BEARING_APPROACH * robomath.transl(0, 0, 25 * offset)), blocking=False)
+                    # non_blocking_move(robot, bearing_offset, BEARING_APPROACH)
 
             if not robot.Busy():
                 state = States.GRIP_BEARING
@@ -117,9 +132,11 @@ def state_machine(robot: RDK.Item, num_unloads: int):
         case States.GRIP_BEARING:
             if not entry_flag:
                 if flip_flag:
+                    # robot.MoveL((FLIPPED_BEARING_CONTACT * robomath.transl(0, 0, 25 * offset)), blocking=False)
                     non_blocking_move(robot, bearing_offset, FLIPPED_BEARING_CONTACT)
                 else:
-                    non_blocking_move(robot, bearing_offset, BEARING_CONTACT)
+                    robot.MoveL((BEARING_CONTACT * robomath.transl(0, 0, 25 * offset)), blocking=False)
+                    # non_blocking_move(robot, bearing_offset, BEARING_CONTACT)
 
             if not robot.Busy():
                 robot.setDO(io_value=0, io_var=1)
@@ -132,9 +149,11 @@ def state_machine(robot: RDK.Item, num_unloads: int):
         case States.LIFT_BEARING:
             if not entry_flag:
                 if flip_flag:
+                    # robot.MoveL((FLIPPED_BEARING_LEAVE * robomath.transl(0, 0, 25 * offset)), blocking=False)
                     non_blocking_move(robot, bearing_offset, FLIPPED_BEARING_LEAVE)
                 else:
-                    non_blocking_move(robot, bearing_offset, BEARING_LEAVE)
+                    robot.MoveL((BEARING_LEAVE * robomath.transl(0, 0, 25 * offset)), blocking=False)
+                    # non_blocking_move(robot, bearing_offset, BEARING_LEAVE)
 
             if not robot.Busy():
                 # If flipped, go to load; else, repeat the pick
@@ -200,6 +219,11 @@ def main():
     # Continuously run state machine to perform task sequence
     while True:
         num_unloads = state_machine(robot, num_unloads)
+
+    # relative_pose = robomath.transl(0, 0, 100)
+    # robot.MoveL(robot.Pose() * relative_pose)
+    #
+    # print("Current tool pose:", robot.PoseTool())
 
     # IO LOGIC
     # robot.setDO(io_value=0, io_var=1)  # First, set D_O0 to low (activate vacuum)

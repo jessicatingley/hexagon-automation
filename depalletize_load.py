@@ -12,7 +12,7 @@ from datetime import datetime
 RDK = Robolink()
 
 
-# Define robot operation states using an enum
+# Define the states of the robot as part of a finite state machine (FSM)
 class States(Enum):
     APPROACH_BEARING = auto()
     GRIP_BEARING = auto()
@@ -29,12 +29,19 @@ class States(Enum):
     UNLOAD = auto()
     EXIT_UNLOAD = auto()
     CYCLE_RESET = auto()
+    UNSCREW_TOP = auto()
+    UNSCREW_BOTTOM = auto()
 
 
-# Constants and state variables
-NUM_TRAY_ROWS = 6
-LOG_FILE = "robot_log.csv"
-CHECKPOINT_FILE = "last_state.csv"
+# ------------------------------
+# Global constants and state variables
+# ------------------------------
+
+NUM_TRAY_ROWS = 6                   # Number of bearing rows per tray (used for offset calculation)
+LOG_FILE = "robot_log.csv"          # File to log state transitions
+CHECKPOINT_FILE = "last_state.csv"  # File to store last known state (for resume)
+
+# State-related variables used in FSM transitions
 state = States.APPROACH_BEARING
 entry_flag = 0  # Used to trigger one-time actions in each state
 flip_flag = 0     # Used to determine if the vacuum tool should be flipped
@@ -50,7 +57,7 @@ FLIPPED_BEARING_APPROACH = [-75.79, -146.28, -81.90, 48.07, -56.86, -268.48]
 FLIPPED_BEARING_LEAVE = [-81.04, -120.42, -81.23, 30.41, -52.31, -270.96]
 
 APPROACH_TOMB_FIRST = [-37.14, -119.54, -90.06, -91.28, -52.96, -221.38]
-APPROACH_TOMB = [-51.30, -118.13, -112.14, -78.23, -61.07, -207.52]
+APPROACH_TOMB = [-50.96, -117.69, -112.95, -77.72, -60.86, -207.83]
 
 EXIT_LOAD_FIRST = [-20.42, -108.52, -107.46, -71.78, -45.99, -241.48]
 EXIT_LOAD = [-29.34, -106.71, -134.93, -53.71, -49.28, -230.25]
@@ -62,7 +69,7 @@ BLOW_TOP = [-40.14, -109.44, -95.32, -97.97, -54.55, -218.23]
 APPROACH_LOADED_TOP = [-31.12, -118.80, -91.73, -86.17, -50.06, -228.12]
 GRIP_LOADED_TOP = [-34.83, -123.10, -84.25, -92.00, -51.80, -223.90]
 
-GRIP_LOADED_BOTTOM = [-47.30, -120.16, -108.48, -78.00, -58.63, -211.19]
+GRIP_LOADED_BOTTOM = [-46.92, -120.27, -109.41, -76.77, -58.40, -211.55]
 
 
 # Initialize the robot arm, tool, frame, and IO
@@ -208,16 +215,17 @@ def state_machine(robot: RDK.Item, num_tray_unloads: int):
                 motion_time = time.perf_counter()
                 entry_flag = 1
 
-            if not robot.Busy() and (time.perf_counter() - motion_time) >= 1:
+            if not robot.Busy() and entry_flag and not substep_flag:
                 robot.setSpeed(speed_joints=5, speed_linear=0.0001)
-                robot.MoveJ(robot.Pose() * robomath.transl(-5.5, 0, 0), blocking=False)
+                robot.MoveJ(robot.Pose() * robomath.transl(-55, 0, 0), blocking=False)
                 motion_time = time.perf_counter()
-                num_load_moves += 1
+                substep_flag = 1
 
-                if num_load_moves > 9:
-                    state = States.EXIT_LOAD
-                    entry_flag = 0
-                    num_load_moves = 0
+            if not robot.Busy() and substep_flag:
+                robot.setSpeed(speed_joints=40, speed_linear=0.06)
+                state = States.EXIT_LOAD
+                entry_flag = 0
+                substep_flag = 0
 
         case States.EXIT_LOAD:
             if not entry_flag:
@@ -230,7 +238,6 @@ def state_machine(robot: RDK.Item, num_tray_unloads: int):
                 entry_flag = 1
 
             if not robot.Busy():
-                robot.setSpeed(speed_joints=40, speed_linear=0.06)
                 if not num_loads:
                     state = States.APPROACH_LOAD
                     num_loads = 1
@@ -305,20 +312,57 @@ def state_machine(robot: RDK.Item, num_tray_unloads: int):
                     substep_flag = 1
                 if substep_flag and not robot.Busy():
                     robot.setSpeed(speed_joints=40, speed_linear=0.06)
-                    state = States.APPROACH_UNLOAD
+                    robot.MoveJ(robot.Pose() * robomath.transl(0, 0, -200))
+                    state = States.UNSCREW_TOP
                     robot.setDO(io_value=0, io_var=2)
                     entry_flag = 0
                     substep_flag = 0
 
+        case States.UNSCREW_TOP:
+            if not robot.Busy() and not entry_flag:
+                robot.MoveJ(APPROACH_SCREW, blocking=False)
+                entry_flag = 1
+
+            if not substep_flag and entry_flag and not robot.Busy():
+                robot.MoveJ(robot.Pose() * robomath.transl(0, 0, 20), blocking=False)
+                robot.setDO(io_value=1, io_var=6)
+                motion_time = time.perf_counter()
+                substep_flag = 1
+
+            if not robot.Busy() and substep_flag and (time.perf_counter() - motion_time) >= 3:
+                robot.setDO(io_value=0, io_var=6)
+                robot.MoveJ(robot.Pose() * robomath.transl(0, 0, -20), blocking=False)
+                entry_flag = 0
+                substep_flag = 0
+                state = States.UNSCREW_BOTTOM
+
+        case States.UNSCREW_BOTTOM:
+            if not entry_flag and not robot.Busy():
+                robot.MoveJ(robot.Pose() * robomath.transl(0, 114, 0), blocking=False)
+                entry_flag = 1
+
+            if not substep_flag and entry_flag and not robot.Busy():
+                robot.MoveJ(robot.Pose() * robomath.transl(0, 0, 20), blocking=False)
+                robot.setDO(io_value=1, io_var=6)
+                motion_time = time.perf_counter()
+                substep_flag = 1
+
+            if not robot.Busy() and substep_flag and (time.perf_counter() - motion_time) >= 3:
+                robot.MoveJ(robot.Pose() * robomath.transl(0, 0, -200), blocking=False)
+                robot.setDO(io_value=0, io_var=6)
+                entry_flag = 0
+                substep_flag = 0
+                state = States.APPROACH_UNLOAD
+
         case States.APPROACH_UNLOAD:
-            if not entry_flag:
+            if not entry_flag and not robot.Busy():
                 if not num_unloads:
                     robot.MoveJ(EXIT_LOAD, blocking=False)
                 else:
                     robot.MoveJ(EXIT_LOAD_FIRST, blocking=False)
                 entry_flag = 1
 
-            if not robot.Busy():
+            if not robot.Busy() and entry_flag:
                 state = States.UNLOAD
                 robot.setDO(io_value=0, io_var=1)
                 if num_unloads:
@@ -334,16 +378,17 @@ def state_machine(robot: RDK.Item, num_tray_unloads: int):
                 motion_time = time.perf_counter()
                 entry_flag = 1
 
-            if not robot.Busy() and (time.perf_counter() - motion_time) >= 1:
+            if not robot.Busy() and entry_flag and not substep_flag:
                 robot.setSpeed(speed_joints=5, speed_linear=0.0001)
-                robot.MoveJ(robot.Pose() * robomath.transl(-5.5, 0, 0), blocking=False)
+                robot.MoveJ(robot.Pose() * robomath.transl(-65, 0, 0), blocking=False)
                 motion_time = time.perf_counter()
-                num_load_moves += 1
+                substep_flag = 1
 
-                if num_load_moves > 11:
-                    state = States.EXIT_UNLOAD
-                    entry_flag = 0
-                    num_load_moves = 0
+            if not robot.Busy() and substep_flag:
+                robot.setSpeed(speed_joints=40, speed_linear=0.06)
+                state = States.EXIT_UNLOAD
+                entry_flag = 0
+                substep_flag = 0
 
         case States.EXIT_UNLOAD:
             if not entry_flag:
@@ -351,7 +396,6 @@ def state_machine(robot: RDK.Item, num_tray_unloads: int):
                 entry_flag = 1
 
             if not robot.Busy():
-                robot.setSpeed(speed_joints=40, speed_linear=0.06)
                 if not num_unloads:
                     state = States.APPROACH_UNLOAD
                     num_unloads = 1

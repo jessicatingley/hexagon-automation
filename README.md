@@ -16,13 +16,13 @@ This project implements a fully automated robotic system for handling air bearin
 - 🔌 **Automated Tool & I/O Control**  
   Digital outputs manage vacuum and blow-off tools based on the robot's current state.
 
-- 🧠 **Checkpoint Recovery** 
+- 🧠 **Checkpoint Recovery**\
   Supports recovery from the last known robot state using a CSV checkpoint file.
 
-- 📊 **Logging System** 
+- 📊 **Logging System**\
   Logs timestamped robot state transitions and key variables for debugging and performance tracking.
 
-- 🔄 **Scalable and Modular Design**  
+- 🔄 **Scalable and Modular Design**\
   Easily configurable for various tray layouts, part sizes, and task variations.
 
 ## Getting Started
